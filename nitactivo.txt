@@ -1,0 +1,154 @@
+<style>
+  .captcha-container {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 10px;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .captcha-container img {
+    display: block;
+    margin: 0 auto 20px;
+  }
+
+  .captcha-container input {
+    width: calc(100% - 20px);
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+  }
+
+  .captcha-container button {
+    width: calc(100% - 20px);
+    padding: 10px;
+    background-color: #0073aa;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+
+  .captcha-container button:hover {
+    background-color: #005f8d;
+  }
+
+  .result-container {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #eaf4ff;
+    border-left: 4px solid #0073aa;
+    border-radius: 5px;
+    font-size: 16px;
+  }
+</style>
+
+<div class="captcha-container">
+  <img id="captchaImage" src="" alt="Captcha Image" />
+  <input type="text" id="captchaValue" placeholder="Ingrese el Captcha" />
+  <input type="text" id="nit" placeholder="Ingrese el NIT" />
+  <button id="submitBtn">Enviar</button>
+  <button id="refreshBtn">Actualizar Captcha</button>
+  <div id="result" class="result-container"></div>
+</div>
+
+<script>
+  class CaptchaResponse {
+    constructor(token, type, image64) {
+      this.token = token;
+      this.type = type;
+      this.image64 = image64;
+    }
+  }
+
+  class Form1 {
+    constructor() {
+      this.obj = null;
+    }
+
+    Form1_Load() {
+      this.ShowCaptchaImage();
+    }
+
+    ShowCaptchaImage() {
+      try {
+        fetch('https://pbdw.impuestos.gob.bo:8080/gob.sin.utiles.captcha.web/captcha.json')
+          .then(response => response.json())
+          .then(responseData => {
+            this.obj = new CaptchaResponse(responseData.token, responseData.type, responseData.image64);
+            const imgElement = document.getElementById('captchaImage');
+            imgElement.src = 'data:image/png;base64,' + this.obj.image64;
+          })
+          .catch(error => {
+            console.error('Error:', error.message);
+          });
+      } catch (error) {
+        console.error('Error:', error.message);
+      }
+    }
+
+    PostNit(token, captchaValue, NIT) {
+      try {
+        const jsonPayload = JSON.stringify({ nit: NIT, tramite: '0', transicion: 'verificar' });
+        const headers = new Headers({
+          'Content-Type': 'application/json',
+          'Captcha-Token': token,
+          'Captcha-Value': captchaValue
+        });
+
+        fetch('https://pbdw.impuestos.gob.bo:8080/gob.sin.padron.servicio.web/consulta/verificarContribuyente', {
+          method: 'POST',
+          headers: headers,
+          body: jsonPayload
+        })
+          .then(response => response.json())
+          .then(responseData => {
+            const resultElement = document.getElementById('result');
+            if (responseData && responseData.nit && responseData.razonSocial && responseData.estado && responseData.fechaUltimoEstado) {
+              resultElement.innerHTML = `
+                <p><strong>NIT:</strong> ${responseData.nit}</p>
+                <p><strong>Razón Social:</strong> ${responseData.razonSocial}</p>
+                <p><strong>Estado:</strong> ${responseData.estado}</p>
+                <p><strong>Desde:</strong> ${responseData.fechaUltimoEstado}</p>
+              `;
+            } else {
+              resultElement.innerText = 'No se encontraron datos. Por favor, verifique el NIT y el Captcha.';
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error.message);
+          });
+      } catch (error) {
+        console.error('Error:', error.message);
+      }
+    }
+
+    SubmitBtn_Click() {
+      const captchaValTxb = document.getElementById('captchaValue').value;
+      const NitTxb = document.getElementById('nit').value;
+      this.PostNit(this.obj.token, captchaValTxb, NitTxb);
+    }
+
+    RefreshBtn_Click() {
+      this.ShowCaptchaImage();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = new Form1();
+    form.Form1_Load();
+
+    document.getElementById('submitBtn').addEventListener('click', function () {
+      form.SubmitBtn_Click();
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', function () {
+      form.RefreshBtn_Click();
+    });
+  });
+</script>
